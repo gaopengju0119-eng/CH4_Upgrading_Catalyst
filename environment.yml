@@ -1,0 +1,18 @@
+name: catalyst-screening
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy>=1.20,<2.1
+  - scipy>=1.7
+  - matplotlib>=3.4
+  - pip
+  - pip:
+    - mp-api>=0.30
+    - mpcontribs-client>=5.0
+    - pymatgen>=2022.0
+    - pyarrow
+    - boltons
+    - pandas==2.2.2
+    - requests==2.32.4
