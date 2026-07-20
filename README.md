@@ -1,213 +1,156 @@
-# Electrocatalyst Screening - CH4 to CH3OH Conversion
+# Electrocatalyst Screening — CH₄ → CH₃OH Conversion
 
-High-throughput computational screening for methane-to-methanol electrocatalyst design using Materials Project data and pymatgen.
-
----
-
-## 📚 Documentation Overview
-
-Start here based on your needs:
-
-### **🚀 Just Want to Run It?**
-→ **[QUICK_START.md](QUICK_START.md)** - 3-step guide to get running in 5 minutes
-
-### **🔑 Need API Key Help?**
-→ **[API_KEY_SETUP.md](API_KEY_SETUP.md)** - Complete Materials Project API key guide
-
-### **🛠️ Want to Understand Parameters?**
-→ **[REQUIRED_USER_INPUTS.md](REQUIRED_USER_INPUTS.md)** - Detailed parameter explanations
-
-### **🐛 Debugging & Fixes**
-- **[BUG_FIX_SUMMARY.md](BUG_FIX_SUMMARY.md)** - AttributeError fix details
-- **[DEBUG_SUMMARY.md](DEBUG_SUMMARY.md)** - IDE warnings and fixes
-- **[IDE_WARNINGS_FIXED.md](IDE_WARNINGS_FIXED.md)** - All 9 PyCharm warnings resolved
-- **[FIXES_APPLIED.md](FIXES_APPLIED.md)** - Initial Jupyter notebook conversion fixes
+High-throughput computational screening for selective methane-to-methanol electrocatalyst
+design using Materials Project data and pymatgen. The workflow pins down the stable phase at
+the operating condition, aligns its DFT density of states (DOS) to the operational Fermi level,
+and computes a spin-aware selectivity index.
 
 ---
 
-## ⚡ Quick Start (TL;DR)
+## ⚡ Quick Start
 
-### 1. Install Dependencies
+### 1. Create the environment
 ```bash
-pip install -U mp-api pymatgen numpy scipy pandas matplotlib
+conda env create -f environment.yml
+conda activate catalyst-screening
+```
+Or update an existing env in place:
+```bash
+conda env update -f environment.yml --prune
 ```
 
-### 2. Get API Key
-Visit https://materialsproject.org/api → Copy your free API key
+### 2. Get a Materials Project API key
+Visit <https://materialsproject.org/api> and copy your free API key.
 
-### 3. Set API Key
-```bash
-# Windows PowerShell
-$env:MP_API_KEY = "your_key_here"
-
-# Mac/Linux Bash
-export MP_API_KEY="your_key_here"
+### 3. Set your API key
+Edit the `MP_API_KEY` variable near the top of `main.py` (line 41):
+```python
+MP_API_KEY = "your_key_here"
 ```
+> ⚠️ The repository currently contains a hardcoded key. Replace it with your own and avoid
+> committing real keys — prefer an environment variable or Colab Secret in shared settings.
 
 ### 4. Run
 ```bash
 python main.py
 ```
 
-That's it! 🎉
-
 ---
 
 ## 📖 What This Script Does
 
-The script performs a complete computational screening workflow:
+`main.py` runs a three-step diagnostic for a single target metal:
 
-### **Step 1: Pourbaix Phase Stability**
-- Queries Materials Project Pourbaix diagram data
-- Identifies thermodynamically stable metal oxide at operating conditions
-- Visualizes phase diagram with operating point
+### Step 1 — Pourbaix Phase Stability
+- Fetches Pourbaix entries from the Materials Project (`get_pourbaix_entries`).
+- Converts the applied potential from the RHE to the SHE scale via the Nernst relation.
+- Finds the thermodynamically stable phase at `(pH, E_SHE)` and resolves its `mp-id`.
+- Raises a clear error if the stable domain is ionic or spans multiple solids (no unique bulk DOS).
 
-### **Step 2: Electronic Structure Analysis**
-- Downloads DFT-calculated density of states (DOS)
-- Aligns DOS to operational Fermi level (vacuum scale)
-- Extracts d-band center and valence band maximum
+### Step 2 — Electronic Structure & Magnetic Analysis
+- Retrieves the summary document and DFT DOS for the stable `mp-id`.
+- Rigidly aligns the DOS to the operational Fermi level on the vacuum scale.
+- Detects spin polarization from the actual `Spin.up` / `Spin.down` channels and diagnoses
+  magnetism from summary metadata, total moment, and DOS spin-asymmetry.
+- Plots the spin-resolved alignment diagnostic.
 
-### **Step 3: Quantum Descriptors**
-- Calculates orbital overlap integrals for CH4 vs CH3OH
-- Computes selectivity indices
-- Estimates reaction energetics
+### Step 3 — Selectivity Index
+- Integrates the DOS over the CH₄ activation window and the CH₃OH over-oxidation window.
+- Computes the selectivity index `S = I_total_CH4 / I_total_CH3OH` (spin-summed).
 
-### **Outputs:**
-- `pourbaix_diagram.png` - Phase stability visualization
-- `dos_windows_*.png` - Density of states analysis
-- `screening_results_*.csv` - Numerical data table
+### Outputs
+- `screening_total_dos_<metal>.csv` — full numerical diagnostic table (e.g. `screening_total_dos_Ni.csv`).
+- Two matplotlib figures shown on screen: the alignment diagnostic and a dual-panel DOS window plot.
+  (Figures are displayed via `plt.show()`, not saved to disk.)
 
 ---
 
-## 🎯 Example Usage
+## 🎛️ Configuration
 
-### Run for Platinum at 1.5V vs RHE, pH 10
-```bash
-python main.py
-# Uses defaults: Pt, 1.5V, pH=10
-```
+All user parameters live in the **`USER INPUT PARAMETERS`** block (`main.py`, lines 41–53).
+Defaults as shipped:
 
-### Change Metal & Conditions
-Edit lines 29-33:
+| Parameter       | Default   | Meaning                                   |
+| --------------- | --------- | ----------------------------------------- |
+| `metal_symbol`  | `"Ni"`    | Target transition metal                   |
+| `E_RHE`         | `2.0`     | Applied potential vs. RHE (V)             |
+| `pH`            | `13.0`    | Electrolyte pH                            |
+| `temp_k`        | `298.15`  | Temperature (K)                           |
+| `ion_conc`      | `1e-6`    | Ion concentration (mol/L)                 |
+| `E_SHE_abs`     | `-4.44`   | Absolute SHE reference (eV, vacuum scale) |
+| `E_HOMO_CH4`    | `-12.80`  | CH₄ HOMO level (eV)                        |
+| `E_HOMO_CH3OH`  | `-10.00`  | CH₃OH HOMO level (eV)                      |
+
+### Change metal & conditions
 ```python
-metal_symbol = "Co"      # Change to cobalt
-E_RHE = 1.2              # Lower potential
-pH = 14.0                # Higher pH (alkaline)
+metal_symbol = "Co"   # e.g. cobalt
+E_RHE = 1.2           # lower potential
+pH = 14.0             # more alkaline
 ```
 
-### Screen Multiple Metals
-Uncomment lines at end of script (~365) and add your metals:
+### Screen multiple metals
+A commented scaffold sits at the end of `main.py` (Section 9, ~lines 336–344):
 ```python
-metals_to_screen = ["Pt", "Ir", "Co", "Ni", "Cu"]
+metals_to_screen = ["Pt", "Ir", "Co", "Ni", "Cu", "Mn"]
 ```
+Wrap Steps 1–3 in a function to run the loop in production.
 
 ---
 
 ## 📋 Requirements
 
-- **Python 3.8+**
-- **pymatgen** - Materials science toolkit
-- **mp-api** - Materials Project API client
-- **numpy, scipy** - Scientific computing
-- **pandas** - Data handling
-- **matplotlib** - Plotting
-- **Internet connection** - For MP API queries
-- **Materials Project API key** - Free from materialsproject.org
+Managed via `environment.yml`:
 
----
-
-## ⚠️ Important Notes
-
-### API Key Security
-- **Never commit** your API key to GitHub
-- **Use environment variables** in production
-- **Keep private** - don't share publicly
-- **Regenerate** if exposed
-
-### Computational Considerations
-- Requires internet (MP API queries)
-- ~30-60 seconds per metal (API + DOS download)
-- DOS data ~100KB per material
-
-### Physics Approximations
-- Rigid DOS alignment (not work function calc)
-- Vacuum scale energy reference (Trasatti convention)
-- DFT functionals from Materials Project
+- **Python 3.11**
+- **numpy** (`<2.1`), **scipy**, **pandas** (`==2.2.2`), **matplotlib**
+- **mp-api** — Materials Project API client
+- **mpcontribs-client** — **required** by `get_pourbaix_entries` for ion reference data
+- **pymatgen** — materials science toolkit
+- **pyarrow**, **boltons**, **requests** (`==2.32.4`)
+- **Internet connection** — for Materials Project API queries
+- **Materials Project API key** — free from materialsproject.org
 
 ---
 
 ## 🔍 Troubleshooting
 
-### "API KEY AUTHENTICATION FAILED"
-→ See [API_KEY_SETUP.md](API_KEY_SETUP.md)
+### `AttributeError: 'NoneType' object has no attribute 'query_contributions'`
+`get_pourbaix_entries` needs the MPContribs client, which only initializes if
+`mpcontribs-client` is installed. Install it (already pinned in `environment.yml`):
+```bash
+pip install mpcontribs-client
+```
 
-### "POURBAIX ANALYSIS FAILED"
-→ Check internet connection, verify API key validity
+### Pourbaix / API errors
+Check your internet connection and verify the API key at <https://materialsproject.org/api>.
 
-### "DOS data unavailable"
-→ Script will use fallback descriptors (d-band center estimate)
+### "stable Pourbaix domain is ionic or contains multiple solids"
+The stable phase at your `(pH, E_RHE)` has no unique bulk `mp-id`. Adjust the potential/pH,
+or add an explicit phase-selection rule.
 
-### IDE warnings/errors
-→ See [IDE_WARNINGS_FIXED.md](IDE_WARNINGS_FIXED.md)
-
----
-
-## 📊 Understanding Outputs
-
-### Pourbaix Diagram
-Shows thermodynamic stability of different phases (solids, ions) across pH and potential ranges. Red dot = your operating point.
-
-### DOS Windows
-Left: CH4 activation window (HOMO = -12.80 eV)  
-Right: CH3OH over-oxidation window (HOMO = -10.00 eV)  
-Shaded regions = integration windows for hybridization
-
-### CSV Results
-Key metrics:
-- **E_F_active** - Operational Fermi level (vacuum scale)
-- **d_band_center** - Descriptor for catalytic activity
-- **I_tot_CH4 / I_tot_CH3OH** - Hybridization integrals
-- **S_kinetic** - Selectivity index (>1 = selective for CH4)
+### Magnetic material with single-channel DOS
+The script refuses to fabricate spin-up/spin-down curves. Use a spin-resolved MP calculation.
 
 ---
 
-## 🚀 Next Steps
+## 📊 Understanding the CSV
 
-1. **Run the script** with your API key
-2. **Examine the outputs** in PNG and CSV files
-3. **Modify parameters** to explore different conditions
-4. **Screen multiple metals** by editing the loop
+Key columns in `screening_total_dos_<metal>.csv`:
+- **Stable Phase / mp-id** — the resolved stable bulk phase.
+- **Magnetic / Magnetic Ordering / Total Magnetization / DOS Spin Asymmetry** — magnetic diagnosis.
+- **DFT Fermi / Energy Shift / Vacuum Fermi** — DOS alignment on the vacuum scale.
+- **Center_elec** — occupied-state electronic center (eV, vacuum).
+- **I_total_CH4 / I_total_CH3OH** — hybridization integrals over each window.
+- **S_selectivity** — selectivity index (`>1` favors CH₄ activation).
 
 ---
 
 ## 📝 Citation
 
 If using this script in research, please cite:
-- Materials Project: https://materialsproject.org
-- pymatgen: https://pymatgen.org
-- Pourbaix analysis methodology in your work
+- Materials Project — <https://materialsproject.org>
+- pymatgen — <https://pymatgen.org>
 
 ---
 
-## 📧 Support
-
-For issues:
-1. Check the relevant documentation file above
-2. Verify API key is valid (test at https://materialsproject.org/api)
-3. Ensure all dependencies installed: `pip install -U mp-api pymatgen`
-
----
-
-## ✨ Features
-
-✅ Complete automation - single script, one command  
-✅ Robust error handling - clear error messages  
-✅ Production-ready - type hints, validation  
-✅ Well documented - 6 guides + inline comments  
-✅ Secure - environment variable support  
-✅ Cross-platform - Windows/Mac/Linux  
-
----
-
-**Last Updated:** 2026-07-20  
-**Status:** Production Ready ✅
+**Last Updated:** 2026-07-20
