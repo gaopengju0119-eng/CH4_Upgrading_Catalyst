@@ -333,7 +333,7 @@ print(f"\nSaved: {output_csv}")
 # 8. VISUALIZATION: Dual-Scale DOS Analysis (Spin-Resolved)
 # ============================================================
 fig, axes = plt.subplots(1, 2, figsize=(14, 8), sharey=True)
-y_min_vac = min(E_HOMO_CH4, E_HOMO_CH3OH) - 2.0
+y_min_vac = min(E_HOMO_CH4, E_HOMO_CH3OH) - 3.0
 y_max_vac = E_F_active + 5.0
 
 for ax, window_lo, window_label, color_shade in zip(
