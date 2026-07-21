@@ -43,7 +43,7 @@ def _trapz(y, x):
 # 2. USER INPUT PARAMETERS
 # ============================================================
 MP_API_KEY = "VhG42T1WDDotMqdqcbId4MJGJVblvtgP"  # Set this in Colab Secrets/environment.
-metal_symbol = "Pt"       # Target transition metal
+metal_symbol = "Ru"       # Target transition metal
 E_RHE = 2.0                # Applied potential vs. RHE (V)
 pH = 13.0                  # Electrolyte pH
 temp_k = 298.15            # Temperature (K)
@@ -53,7 +53,7 @@ ion_conc = 1e-6            # Ion concentration (mol/L)
 # If set (e.g., "mp-1234"), Section 5+ will use this ID instead of the stable Pourbaix phase.
 # Leave as None to use the Pourbaix-derived stable phase.
 # >>> SET YOUR CUSTOM MATERIAL ID HERE <<<
-MANUAL_MATERIAL_ID = None  # e.g., "mp-1234" or None to auto-detect from Pourbaix
+MANUAL_MATERIAL_ID = "mp-825"  # e.g., "mp-1234" or None to auto-detect from Pourbaix
 
 # Fixed reference energy levels (vacuum scale, eV)
 E_SHE_abs = -4.44
@@ -350,6 +350,9 @@ print("DIAGNOSTIC REPORT SUMMARY (TOTAL DOS)")
 print("=" * 60)
 
 results_dict = {
+    "DOS Calculation Source": "Manual" if MANUAL_MATERIAL_ID and str(MANUAL_MATERIAL_ID).strip() else "Pourbaix-derived",
+    "DOS Material ID (used)": target_material_id,
+    "DOS Formula (used)": formula_pretty,
     "Metal Symbol": metal_symbol,
     "E_RHE (V)": E_RHE,
     "pH": pH,
