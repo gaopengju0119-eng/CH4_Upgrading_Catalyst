@@ -27,7 +27,8 @@ import numpy as np
 import pandas as pd
 from mp_api.client import MPRester
 from pymatgen.analysis.pourbaix_diagram import PourbaixDiagram, PourbaixPlotter
-from pymatgen.electronic_structure.core import Spin
+from pymatgen.core import Element
+from pymatgen.electronic_structure.core import OrbitalType, Spin
 
 warnings.filterwarnings("ignore")
 
@@ -43,7 +44,7 @@ def _trapz(y, x):
 # 2. USER INPUT PARAMETERS
 # ============================================================
 MP_API_KEY = "VhG42T1WDDotMqdqcbId4MJGJVblvtgP"  # Set this in Colab Secrets/environment.
-metal_symbol = "Pt"       # Target transition metal
+metal_symbol = "Ru"       # Target transition metal
 E_RHE = 2.0                # Applied potential vs. RHE (V)
 pH = 13.0                  # Electrolyte pH
 temp_k = 298.15            # Temperature (K)
@@ -128,50 +129,15 @@ def extract_solid_mp_id(entry):
     return unique_ids[0] if len(unique_ids) == 1 else None
 
 
-def _base_mp_id(entry_id):
-    """Strip any calculation-type suffix, e.g. 'mp-123-GGA+U' -> 'mp-123'."""
-    parts = str(entry_id).split("-")
-    if len(parts) >= 2 and parts[0] == "mp":
-        return f"{parts[0]}-{parts[1]}"
-    return str(entry_id)
-
-
 stable_entry_id = extract_solid_mp_id(stable_entry)
-# Normalize a calculation-type suffix if present (e.g., "mp-123-GGA+U" -> "mp-123").
-if stable_entry_id:
-    stable_entry_id = _base_mp_id(stable_entry_id)
+# Extract base mp-id if it contains calculation type suffix (e.g., "mp-123-GGA+U" -> "mp-123")
+if stable_entry_id and "-" in stable_entry_id:
+    # Split and take only the first part (base mp-id)
+    base_mp_id = stable_entry_id.split("-")[0] + "-" + stable_entry_id.split("-")[1]
+    if base_mp_id.startswith("mp-"):
+        stable_entry_id = base_mp_id
 print(f"  [Stable phase]  : {stable_formula}")
 print(f"  [Stable mp-id]  : {stable_entry_id or 'none (ion or multi-solid domain)'}")
-
-# ---- Enumerate every solid phase in the diagram (mark the operando-stable one) ----
-# These other solids are not used downstream, but listing them makes the phase
-# competition at the operating point transparent.
-stable_solid_ids = set()
-for component in (getattr(stable_entry, "entry_list", None) or [stable_entry]):
-    inner = getattr(component, "entry", component)
-    cid = getattr(inner, "entry_id", None) or getattr(component, "entry_id", None)
-    ptype = str(getattr(component, "phase_type", getattr(stable_entry, "phase_type", ""))).lower()
-    if cid and str(cid).startswith("mp-") and ptype != "ion":
-        stable_solid_ids.add(_base_mp_id(cid))
-
-print("  [All solid phases in diagram]")
-seen_ids = set()
-for solid in sorted(pbx_entries, key=lambda e: e.name):
-    if str(getattr(solid, "phase_type", "")).lower() != "solid":
-        continue
-    raw_id = getattr(solid, "entry_id", None)
-    if not raw_id:
-        continue
-    norm_id = _base_mp_id(raw_id)
-    if norm_id in seen_ids:
-        continue
-    seen_ids.add(norm_id)
-    if norm_id in stable_solid_ids:
-        marker = "  <-- thermally stable (at operating point)"
-    else:
-        marker = ""
-    print(f"      - {solid.name:<18s} {norm_id}{marker}")
-
 if stable_entry_id is None:
     raise RuntimeError(
         "The stable Pourbaix domain is ionic or contains multiple solids, so a unique bulk DOS "
@@ -295,6 +261,81 @@ print(f"      - Shift applied: {energy_shift:.4f} eV")
 print(f"      - Vacuum Fermi (eV): {E_F_active:.4f} eV")
 
 # ============================================================
+# 5b. Orbital-Projected DOS (metal d-band, O 2p-band)
+# ============================================================
+# get_dos_by_material_id returns a CompleteDos, which carries the element- and
+# orbital-projected DOS (the same data the Materials Project site plots). Not every
+# MP entry stores projections, and O only exists for oxide/hydroxide phases, so every
+# projection lookup is guarded and the script degrades to total-DOS-only cleanly.
+print("\n" + "=" * 60)
+print("STEP 2b: Orbital-Projected DOS (PDOS)")
+print("=" * 60)
+
+
+def _sum_spins(dos_obj):
+    """Spin-summed density array for a pymatgen Dos, on its native energy grid."""
+    return sum(np.asarray(d, dtype=float) for d in dos_obj.densities.values())
+
+
+def occupied_band_center(density):
+    """DOS-weighted centroid of the occupied states (vacuum scale, eV)."""
+    density = np.asarray(density, dtype=float)
+    mask = energies_abs <= E_F_active
+    e_occ = energies_abs[mask]
+    g_occ = density[mask]
+    norm = _trapz(g_occ, e_occ) if e_occ.size >= 2 else 0.0
+    return _trapz(e_occ * g_occ, e_occ) / norm if norm > 1e-12 else np.nan
+
+
+metal_d_center = np.nan
+o_p_center = np.nan
+projected_curves = []  # list of (label, density, color)
+
+if getattr(dos_data, "pdos", None):
+    # Metal d-band (always attempt the target metal).
+    try:
+        metal_d = dos_data.get_element_spd_dos(Element(metal_symbol))[OrbitalType.d]
+        metal_d_density = _sum_spins(metal_d)
+        metal_d_center = occupied_band_center(metal_d_density)
+        projected_curves.append((f"{metal_symbol} d", metal_d_density, "tab:blue"))
+    except Exception as exc:  # noqa: BLE001 - projection may be absent for this entry
+        print(f"  [PDOS] no {metal_symbol}-d projection: {exc}")
+
+    # Oxygen 2p-band (only present for oxide/hydroxide phases).
+    try:
+        o_p = dos_data.get_element_spd_dos(Element("O"))[OrbitalType.p]
+        o_p_density = _sum_spins(o_p)
+        o_p_center = occupied_band_center(o_p_density)
+        projected_curves.append(("O p", o_p_density, "tab:red"))
+    except Exception:  # noqa: BLE001 - no oxygen in this phase
+        print("  [PDOS] no oxygen in this phase; skipping O-p")
+else:
+    print("  [PDOS] No projected DOS stored for this material; total DOS only.")
+
+print(f"  [Metal d-band center] : {metal_d_center:.4f} eV (vacuum)")
+print(f"  [O 2p-band center]    : {o_p_center:.4f} eV (vacuum)")
+
+if projected_curves:
+    plt.figure(figsize=(9, 6))
+    for label, density, color in projected_curves:
+        plt.plot(density, energies_abs, color=color, lw=1.8, label=label)
+        plt.fill_betweenx(energies_abs, 0, density, color=color, alpha=0.12)
+    plt.axvline(0, color="black", lw=0.8, alpha=0.5)
+    plt.axhline(E_F_active, color="green", ls="--", lw=2, label=f"Fermi level ({E_F_active:.2f} eV)")
+    plt.axhline(E_HOMO_CH4, color="purple", ls=":", lw=1.2, label=f"CH4 HOMO ({E_HOMO_CH4:.2f} eV)")
+    plt.axhline(E_HOMO_CH3OH, color="brown", ls=":", lw=1.2, label=f"CH3OH HOMO ({E_HOMO_CH3OH:.2f} eV)")
+    plt.ylabel("Energy (eV vs. vacuum)")
+    plt.xlabel("Projected DOS (states/eV)")
+    plt.title(f"Orbital-projected DOS: {formula_pretty} ({stable_entry_id})")
+    plt.legend(loc="best", fontsize=9)
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    pdos_png = os.path.join(OUTPUT_DIR, f"pdos_{metal_symbol}.png")
+    plt.savefig(pdos_png, dpi=300, bbox_inches="tight")
+    print(f"Saved: {pdos_png}")
+    plt.show()
+
+# ============================================================
 # 6. Quantum Descriptors & Selectivity Metrics (Spin-Summed)
 # ============================================================
 print("\n" + "=" * 60)
@@ -348,6 +389,8 @@ results_dict = {
     "Energy Shift (eV)": round(energy_shift, 4),
     "Vacuum Fermi (eV)": round(E_F_active, 4),
     "Center_elec (eV)": round(electronic_center, 4),
+    "Metal_d_center (eV)": round(metal_d_center, 4),
+    "O_p_center (eV)": round(o_p_center, 4),
     "I_up_CH4": round(I_up_CH4, 6),
     "I_down_CH4": round(I_dn_CH4, 6),
     "I_total_CH4": round(I_tot_CH4, 6),
