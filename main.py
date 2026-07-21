@@ -237,7 +237,7 @@ else:
 plt.axvline(0, color="black", lw=0.8, alpha=0.5)
 plt.axhline(E_F_active, color="green", ls="--", lw=2, label=f"Fermi level ({E_F_active:.2f} eV)")
 plt.ylabel("Energy (eV vs. vacuum)")
-plt.xlabel("DOS (states/eV; spin down mirrored when magnetic)")
+plt.xlabel("DOS (states/eV)")
 plt.title(f"Spin-resolved alignment diagnostic: {formula_pretty} ({stable_entry_id})")
 plt.legend(loc="best")
 plt.grid(alpha=0.3)
