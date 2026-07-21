@@ -9,8 +9,12 @@ Materials Project + pymatgen.
 # 0. Install Dependencies
 # ============================================================
 # In Google Colab, run this in a separate installation cell:
-# !pip install --upgrade pyarrow mp-api mpcontribs-client pymatgen boltons "numpy<2.1" -q
-# !pip install pandas==2.2.2 requests==2.32.4 --no-deps --force-reinstall -q
+# !pip install --upgrade pyarrow mp-api mpcontribs-client "pymatgen>=2026.1" boltons "numpy<2.1" -q
+# !pip install pandas==2.2.2 "requests>=2.32.5" --no-deps --force-reinstall -q
+#
+# Note: mp-api pulls in emmet-core>=0.87, which imports StructureGraph/MoleculeGraph
+# from pymatgen.core.graphs (added in pymatgen 2026.1). An older pymatgen raises
+# "ModuleNotFoundError: No module named 'pymatgen.core.graphs'".
 
 # ============================================================
 # 1. Imports
@@ -22,7 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from mp_api.client import MPRester
-from pymatgen.analysis.pourbaix_diagram import PourbaixDiagram
+from pymatgen.analysis.pourbaix_diagram import PourbaixDiagram, PourbaixPlotter
 from pymatgen.electronic_structure.core import Spin
 
 warnings.filterwarnings("ignore")
@@ -52,6 +56,17 @@ E_HOMO_CH3OH = -10.00
 MAG_DOS_REL_TOL = 1e-3     # Relative integrated spin-asymmetry threshold
 MAG_MOMENT_TOL = 1e-3      # µB per formula unit
 
+# Output artifacts (plots + CSV) are written to an "Output" folder next to this
+# script. Falls back to the current working directory when __file__ is undefined
+# (e.g. in a Colab/Jupyter cell).
+try:
+    _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    _BASE_DIR = os.getcwd()
+OUTPUT_DIR = os.path.join(_BASE_DIR, "Output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+print(f"[Output] Artifacts will be saved to: {OUTPUT_DIR}")
+
 
 # ============================================================
 # 3. UNIT CONVERSION: E_RHE -> E_SHE
@@ -80,6 +95,22 @@ pbx = PourbaixDiagram(
 )
 stable_entry = pbx.find_stable_entry(pH=pH, V=E_SHE)
 stable_formula = stable_entry.name
+
+# ---- Pourbaix diagram plot with the operating point marked ----
+plotter = PourbaixPlotter(pbx)
+ax_pbx = plotter.get_pourbaix_plot(
+    title=f"Pourbaix diagram: {metal_symbol} (ion conc = {ion_conc:g} M)",
+)
+ax_pbx.scatter(
+    [pH], [E_SHE],
+    marker="*", s=350, color="red", edgecolor="black", zorder=5,
+    label=f"Operating point (pH={pH:g}, {E_SHE:.2f} V vs. SHE)",
+)
+ax_pbx.legend(loc="best", fontsize=10)
+pourbaix_png = os.path.join(OUTPUT_DIR, f"pourbaix_{metal_symbol}.png")
+ax_pbx.figure.savefig(pourbaix_png, dpi=300, bbox_inches="tight")
+print(f"Saved: {pourbaix_png}")
+plt.show()
 
 
 def extract_solid_mp_id(entry):
@@ -211,6 +242,9 @@ plt.title(f"Spin-resolved alignment diagnostic: {formula_pretty} ({stable_entry_
 plt.legend(loc="best")
 plt.grid(alpha=0.3)
 plt.tight_layout()
+alignment_png = os.path.join(OUTPUT_DIR, f"dos_alignment_{metal_symbol}.png")
+plt.savefig(alignment_png, dpi=300, bbox_inches="tight")
+print(f"Saved: {alignment_png}")
 plt.show()
 
 # ---- 2d. Center calculation (spin-summed) ----
@@ -290,7 +324,7 @@ results_dict = {
 df_results = pd.DataFrame([results_dict]).T
 df_results.columns = ["Value"]
 print(df_results.to_string())
-output_csv = f"screening_total_dos_{metal_symbol}.csv"
+output_csv = os.path.join(OUTPUT_DIR, f"screening_total_dos_{metal_symbol}.csv")
 df_results.to_csv(output_csv)
 print(f"\nSaved: {output_csv}")
 
@@ -330,6 +364,9 @@ fig.suptitle(
     fontsize=14,
 )
 plt.tight_layout()
+selectivity_png = os.path.join(OUTPUT_DIR, f"selectivity_dos_{metal_symbol}.png")
+fig.savefig(selectivity_png, dpi=300, bbox_inches="tight")
+print(f"Saved: {selectivity_png}")
 plt.show()
 
 # ============================================================

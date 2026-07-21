@@ -9,10 +9,11 @@ dependencies:
   - matplotlib>=3.4
   - pip
   - pip:
-    - mp-api>=0.30
+    - mp-api>=0.46
     - mpcontribs-client>=5.0
-    - pymatgen>=2022.0
+    - pymatgen>=2026.1
+    - pymatgen-core>=2026.1
     - pyarrow
     - boltons
     - pandas==2.2.2
-    - requests==2.32.4
+    - requests>=2.32.5
