@@ -106,6 +106,7 @@ ax_pbx.scatter(
     marker="*", s=350, color="red", edgecolor="black", zorder=5,
     label=f"Operating point (pH={pH:g}, {E_SHE:.2f} V vs. SHE)",
 )
+ax_pbx.set_ylabel("E (V vs. SHE)")
 ax_pbx.legend(loc="best", fontsize=10)
 pourbaix_png = os.path.join(OUTPUT_DIR, f"pourbaix_{metal_symbol}.png")
 ax_pbx.figure.savefig(pourbaix_png, dpi=300, bbox_inches="tight")
@@ -256,7 +257,7 @@ electronic_center = _trapz(occ_E * occ_dos, occ_E) / occ_norm if occ_norm > 1e-1
 
 print("  [Alignment Summary]")
 print(f"      - Shift applied: {energy_shift:.4f} eV")
-print(f"      - Electronic center (vacuum): {electronic_center:.4f} eV")
+print(f"      - Vacuum Fermi (eV): {E_F_active:.4f} eV")
 
 # ============================================================
 # 6. Quantum Descriptors & Selectivity Metrics (Spin-Summed)
