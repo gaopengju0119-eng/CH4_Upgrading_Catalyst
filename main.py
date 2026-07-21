@@ -43,7 +43,7 @@ def _trapz(y, x):
 # 2. USER INPUT PARAMETERS
 # ============================================================
 MP_API_KEY = "VhG42T1WDDotMqdqcbId4MJGJVblvtgP"  # Set this in Colab Secrets/environment.
-metal_symbol = "Ni"       # Target transition metal
+metal_symbol = "Pt"       # Target transition metal
 E_RHE = 2.0                # Applied potential vs. RHE (V)
 pH = 13.0                  # Electrolyte pH
 temp_k = 298.15            # Temperature (K)
@@ -52,7 +52,7 @@ ion_conc = 1e-6            # Ion concentration (mol/L)
 # Fixed reference energy levels (vacuum scale, eV)
 E_SHE_abs = -4.44
 E_HOMO_CH4 = -12.80
-E_HOMO_CH3OH = -10.00
+E_HOMO_CH3OH = -10.80
 MAG_DOS_REL_TOL = 1e-3     # Relative integrated spin-asymmetry threshold
 MAG_MOMENT_TOL = 1e-3      # µB per formula unit
 
@@ -368,14 +368,3 @@ selectivity_png = os.path.join(OUTPUT_DIR, f"selectivity_dos_{metal_symbol}.png"
 fig.savefig(selectivity_png, dpi=300, bbox_inches="tight")
 print(f"Saved: {selectivity_png}")
 plt.show()
-
-# ============================================================
-# 9. MULTI-METAL SCREENING LOOP (optional extension)
-# ============================================================
-# metals_to_screen = ["Pt", "Ir", "Co", "Ni", "Cu", "Mn"]
-# all_results = []
-# for metal in metals_to_screen:
-#     metal_symbol = metal
-#     # Re-run Steps 1-3 here (wrap them in a function for production use).
-#     # all_results.append(results_dict)
-# pd.DataFrame(all_results).to_csv("multi_metal_screening.csv", index=False)
