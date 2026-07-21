@@ -49,6 +49,12 @@ pH = 13.0                  # Electrolyte pH
 temp_k = 298.15            # Temperature (K)
 ion_conc = 1e-6            # Ion concentration (mol/L)
 
+# OPTIONAL: Manually specify a material ID to skip Pourbaix analysis.
+# If set (e.g., "mp-1234"), Section 5+ will use this ID instead of the stable Pourbaix phase.
+# Leave as None to use the Pourbaix-derived stable phase.
+# >>> SET YOUR CUSTOM MATERIAL ID HERE <<<
+MANUAL_MATERIAL_ID = None  # e.g., "mp-1234" or None to auto-detect from Pourbaix
+
 # Fixed reference energy levels (vacuum scale, eV)
 E_SHE_abs = -4.44
 E_HOMO_CH4 = -12.80
@@ -185,22 +191,31 @@ print("\n" + "=" * 60)
 print("STEP 2: Electronic Structure & Magnetic Analysis")
 print("=" * 60)
 
+# Determine which material ID to use: manual override or Pourbaix-derived stable phase
+# >>> If you want to manually calculate DOS for a different material, change MANUAL_MATERIAL_ID above <<<
+if MANUAL_MATERIAL_ID and str(MANUAL_MATERIAL_ID).strip():
+    target_material_id = str(MANUAL_MATERIAL_ID).strip()
+    print(f"  [Using MANUAL material ID] : {target_material_id}")
+else:
+    target_material_id = stable_entry_id
+    print(f"  [Using Pourbaix stable ID] : {target_material_id}")
+
 # ---- 2a. Active Fermi level (vacuum scale) ----
 E_F_active = E_SHE_abs - E_SHE
 
 # ---- 2b. DOS retrieval & magnetic metadata ----
 mpr = MPRester(MP_API_KEY)
 summary_docs = mpr.materials.summary.search(
-    material_ids=[stable_entry_id],
+    material_ids=[target_material_id],
     fields=["material_id", "formula_pretty", "is_magnetic", "ordering", "total_magnetization"],
 )
 if not summary_docs:
-    raise RuntimeError(f"No Materials Project summary document for {stable_entry_id}.")
+    raise RuntimeError(f"No Materials Project summary document for {target_material_id}.")
 summary = summary_docs[0]
-dos_data = mpr.get_dos_by_material_id(stable_entry_id)
+dos_data = mpr.get_dos_by_material_id(target_material_id)
 
 if dos_data is None:
-    raise RuntimeError(f"Could not retrieve DOS for {stable_entry_id}.")
+    raise RuntimeError(f"Could not retrieve DOS for {target_material_id}.")
 
 formula_pretty = getattr(summary, "formula_pretty", stable_formula)
 summary_is_magnetic = bool(getattr(summary, "is_magnetic", False))
@@ -243,7 +258,7 @@ is_magnetic = (
 
 if is_magnetic and not is_spin_polarized:
     raise RuntimeError(
-        f"{stable_entry_id} is reported magnetic, but its MP DOS has only one spin channel. "
+        f"{target_material_id} is reported magnetic, but its MP DOS has only one spin channel. "
         "Refusing to fabricate spin-up/spin-down curves; use a spin-resolved calculation."
     )
 
@@ -252,7 +267,7 @@ if is_spin_polarized:
 else:
     total_dos = np.abs(dos_up)
 
-print(f"  [Material ID]   : {stable_entry_id}")
+print(f"  [Material ID]   : {target_material_id}")
 print(f"  [Formula]       : {formula_pretty}")
 print(f"  [MP ordering]   : {ordering}")
 print(f"  [Total moment]  : {total_mag:.6f} uB")
@@ -274,7 +289,7 @@ plt.axvline(0, color="black", lw=0.8, alpha=0.5)
 plt.axhline(E_F_active, color="green", ls="--", lw=2, label=f"Fermi level ({E_F_active:.2f} eV)")
 plt.ylabel("Energy (eV vs. vacuum)")
 plt.xlabel("DOS (states/eV)")
-plt.title(f"Spin-resolved alignment diagnostic: {formula_pretty} ({stable_entry_id})")
+plt.title(f"Spin-resolved alignment diagnostic: {formula_pretty} ({target_material_id})")
 plt.legend(loc="best")
 plt.grid(alpha=0.3)
 plt.tight_layout()
@@ -395,7 +410,7 @@ for ax, window_lo, window_label, color_shade in zip(
 
 axes[0].set_ylabel("Energy (eV vs. vacuum)")
 fig.suptitle(
-    f"Selectivity Screening: {formula_pretty} ({stable_entry_id})\n"
+    f"Selectivity Screening: {formula_pretty} ({target_material_id})\n"
     f"{'Spin-resolved magnetic DOS' if is_magnetic else 'Nonmagnetic DOS'}",
     fontsize=14,
 )
